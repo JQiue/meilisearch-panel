@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { MeilisearchService } from '../services/meilisearch';
-import { Index, IndexStats } from '../types';
-import { DocumentViewer } from './DocumentViewer';
-import { SettingsEditor } from './SettingsEditor';
-import { SearchPlayground } from './SearchPlayground';
-import { SpinnerIcon } from './icons';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+
+import { MeilisearchService } from "../services/meilisearch";
+
+import { DocumentViewer } from "./DocumentViewer";
+import { SpinnerIcon } from "./icons";
+import { SearchPlayground } from "./SearchPlayground";
+import { SettingsEditor } from "./SettingsEditor";
+
+import type { Index, IndexStats } from "../types";
 
 interface IndexDetailProps {
   indexUid: string;
@@ -12,10 +15,10 @@ interface IndexDetailProps {
   onBack: () => void;
 }
 
-type Tab = 'documents' | 'settings' | 'stats' | 'playground';
+type Tab = "documents" | "settings" | "stats" | "playground";
 
-export const IndexDetail: React.FC<IndexDetailProps> = ({ indexUid, service, onBack }) => {
-  const [activeTab, setActiveTab] = useState<Tab>('documents');
+export const IndexDetail: React.FC<IndexDetailProps> = ({ indexUid, service }) => {
+  const [activeTab, setActiveTab] = useState<Tab>("documents");
   const [index, setIndex] = useState<Index | null>(null);
   const [stats, setStats] = useState<IndexStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,7 +42,7 @@ export const IndexDetail: React.FC<IndexDetailProps> = ({ indexUid, service, onB
       setStats(statsData);
       isInitialLoad.current = false;
     } catch (e: any) {
-      setError(e.message || 'Failed to fetch index details.');
+      setError(e.message || "Failed to fetch index details.");
     } finally {
       setLoading(false);
       setIsPolling(false);
@@ -57,18 +60,18 @@ export const IndexDetail: React.FC<IndexDetailProps> = ({ indexUid, service, onB
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'documents':
+      case "documents":
         return <DocumentViewer indexUid={indexUid} service={service} />;
-      case 'settings':
+      case "settings":
         return <SettingsEditor indexUid={indexUid} service={service} />;
-      case 'playground':
+      case "playground":
         return <SearchPlayground indexUid={indexUid} service={service} />;
-      case 'stats':
+      case "stats":
         return (
-          <div className="mt-6 bg-white dark:bg-gray-800 shadow-md rounded-lg p-6">
-            <h2 className="text-2xl font-bold mb-4">Statistics</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg">
+          <div className="mt-6 rounded-lg bg-white p-6 shadow-md dark:bg-gray-800">
+            <h2 className="mb-4 text-2xl font-bold">Statistics</h2>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-lg bg-gray-100 p-4 dark:bg-gray-700">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
                   Number of Documents
                 </h3>
@@ -76,27 +79,27 @@ export const IndexDetail: React.FC<IndexDetailProps> = ({ indexUid, service, onB
                   {stats?.numberOfDocuments.toLocaleString()}
                 </p>
               </div>
-              <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg">
+              <div className="rounded-lg bg-gray-100 p-4 dark:bg-gray-700">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
                   Indexing Status
                 </h3>
                 <div className="flex items-center space-x-2">
                   <p
                     className={`text-2xl font-semibold ${
-                      stats?.isIndexing ? 'text-blue-500' : 'text-green-500'
+                      stats?.isIndexing ? "text-blue-500" : "text-green-500"
                     }`}
                   >
-                    {stats?.isIndexing ? 'Processing' : 'Idle'}
+                    {stats?.isIndexing ? "Processing" : "Idle"}
                   </p>
-                  {isPolling && <SpinnerIcon className="h-5 w-5 text-gray-500 animate-spin" />}
+                  {isPolling && <SpinnerIcon className="h-5 w-5 animate-spin text-gray-500" />}
                 </div>
               </div>
             </div>
             <div className="mt-6">
-              <h3 className="text-lg font-semibold mb-2">Field Distribution</h3>
+              <h3 className="mb-2 text-lg font-semibold">Field Distribution</h3>
               <div className="max-h-64 overflow-y-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
+                  <thead className="sticky top-0 bg-gray-50 dark:bg-gray-700">
                     <tr>
                       <th className="px-4 py-2 text-left">Field</th>
                       <th className="px-4 py-2 text-left">Count</th>
@@ -122,30 +125,30 @@ export const IndexDetail: React.FC<IndexDetailProps> = ({ indexUid, service, onB
   const tabClasses = (tab: Tab) => `px-4 py-2 text-sm font-medium rounded-t-lg border-b-2
         ${
           activeTab === tab
-            ? 'border-red-500 text-red-600 dark:text-red-400'
-            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+            ? "border-red-500 text-red-600 dark:text-red-400"
+            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200"
         }`;
 
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-3xl font-bold font-mono">{index?.uid}</h1>
+        <h1 className="font-mono text-3xl font-bold">{index?.uid}</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Primary Key: {index?.primaryKey || 'Not set'}
+          Primary Key: {index?.primaryKey || "Not set"}
         </p>
       </div>
       <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="-mb-px flex space-x-6">
-          <button onClick={() => setActiveTab('documents')} className={tabClasses('documents')}>
+          <button onClick={() => setActiveTab("documents")} className={tabClasses("documents")}>
             Documents
           </button>
-          <button onClick={() => setActiveTab('settings')} className={tabClasses('settings')}>
+          <button onClick={() => setActiveTab("settings")} className={tabClasses("settings")}>
             Settings
           </button>
-          <button onClick={() => setActiveTab('stats')} className={tabClasses('stats')}>
+          <button onClick={() => setActiveTab("stats")} className={tabClasses("stats")}>
             Stats
           </button>
-          <button onClick={() => setActiveTab('playground')} className={tabClasses('playground')}>
+          <button onClick={() => setActiveTab("playground")} className={tabClasses("playground")}>
             Search Playground
           </button>
         </nav>

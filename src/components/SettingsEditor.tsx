@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { MeilisearchService } from '../services/meilisearch';
-import { Settings } from '../types';
+import React, { useState, useEffect, useCallback } from "react";
+
+import { MeilisearchService } from "../services/meilisearch";
+
+import type { Settings } from "../types";
 
 interface SettingsEditorProps {
   indexUid: string;
@@ -12,13 +14,13 @@ const ArrayInput: React.FC<{
   values: string[];
   onChange: (values: string[]) => void;
 }> = ({ label, values, onChange }) => {
-  const textValue = values.join(', ');
+  const textValue = values.join(", ");
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange(
       e.target.value
-        .split(',')
+        .split(",")
         .map((s) => s.trim())
-        .filter(Boolean)
+        .filter(Boolean),
     );
   };
 
@@ -29,7 +31,7 @@ const ArrayInput: React.FC<{
         value={textValue}
         onChange={handleChange}
         rows={3}
-        className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm text-gray-900 dark:text-white dark:bg-gray-700 font-mono"
+        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
         placeholder="comma, separated, values"
       />
     </div>
@@ -41,7 +43,7 @@ export const SettingsEditor: React.FC<SettingsEditorProps> = ({ indexUid, servic
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
+  const [saveMessage, setSaveMessage] = useState("");
 
   const fetchSettings = useCallback(async () => {
     setLoading(true);
@@ -50,7 +52,7 @@ export const SettingsEditor: React.FC<SettingsEditorProps> = ({ indexUid, servic
       const data = await service.getSettings(indexUid);
       setSettings(data);
     } catch (e: any) {
-      setError(e.message || 'Failed to fetch settings');
+      setError(e.message || "Failed to fetch settings");
     } finally {
       setLoading(false);
     }
@@ -67,11 +69,11 @@ export const SettingsEditor: React.FC<SettingsEditorProps> = ({ indexUid, servic
   const handleSave = async () => {
     if (!settings) return;
     setIsSaving(true);
-    setSaveMessage('');
+    setSaveMessage("");
     try {
       await service.updateSettings(indexUid, settings);
-      setSaveMessage('Settings updated successfully! Changes may take a moment to apply.');
-      setTimeout(() => setSaveMessage(''), 5000);
+      setSaveMessage("Settings updated successfully! Changes may take a moment to apply.");
+      setTimeout(() => setSaveMessage(""), 5000);
     } catch (e: any) {
       setSaveMessage(`Error: ${e.message}`);
     } finally {
@@ -84,22 +86,22 @@ export const SettingsEditor: React.FC<SettingsEditorProps> = ({ indexUid, servic
   if (!settings) return null;
 
   return (
-    <div className="mt-6 bg-white dark:bg-gray-800 shadow-md rounded-lg p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="mt-6 rounded-lg bg-white p-6 shadow-md dark:bg-gray-800">
+      <div className="mb-6 flex items-center justify-between">
         <h2 className="text-2xl font-bold">Index Settings</h2>
         <button
           onClick={handleSave}
           disabled={isSaving}
-          className="bg-red-600 text-white px-6 py-2 rounded-md hover:bg-red-700 disabled:bg-red-400"
+          className="rounded-md bg-red-600 px-6 py-2 text-white hover:bg-red-700 disabled:bg-red-400"
         >
-          {isSaving ? 'Saving...' : 'Save Changes'}
+          {isSaving ? "Saving..." : "Save Changes"}
         </button>
       </div>
 
       {saveMessage && (
         <p
           className={`mb-4 text-sm ${
-            saveMessage.startsWith('Error') ? 'text-red-500' : 'text-green-500'
+            saveMessage.startsWith("Error") ? "text-red-500" : "text-green-500"
           }`}
         >
           {saveMessage}
@@ -110,27 +112,27 @@ export const SettingsEditor: React.FC<SettingsEditorProps> = ({ indexUid, servic
         <ArrayInput
           label="Displayed Attributes"
           values={settings.displayedAttributes || []}
-          onChange={(v) => handleSettingChange('displayedAttributes', v)}
+          onChange={(v) => handleSettingChange("displayedAttributes", v)}
         />
         <ArrayInput
           label="Searchable Attributes"
           values={settings.searchableAttributes || []}
-          onChange={(v) => handleSettingChange('searchableAttributes', v)}
+          onChange={(v) => handleSettingChange("searchableAttributes", v)}
         />
         <ArrayInput
           label="Filterable Attributes"
           values={settings.filterableAttributes || []}
-          onChange={(v) => handleSettingChange('filterableAttributes', v)}
+          onChange={(v) => handleSettingChange("filterableAttributes", v)}
         />
         <ArrayInput
           label="Sortable Attributes"
           values={settings.sortableAttributes || []}
-          onChange={(v) => handleSettingChange('sortableAttributes', v)}
+          onChange={(v) => handleSettingChange("sortableAttributes", v)}
         />
         <ArrayInput
           label="Ranking Rules"
           values={settings.rankingRules || []}
-          onChange={(v) => handleSettingChange('rankingRules', v)}
+          onChange={(v) => handleSettingChange("rankingRules", v)}
         />
       </div>
     </div>

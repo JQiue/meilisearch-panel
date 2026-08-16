@@ -1,5 +1,5 @@
 export interface MeiliHealth {
-  status: 'available' | 'unavailable';
+  status: "available" | "unavailable";
 }
 
 export interface Index {
@@ -18,7 +18,7 @@ export interface IndexStats {
 export interface Task {
   uid: number;
   indexUid: string;
-  status: 'enqueued' | 'processing' | 'succeeded' | 'failed';
+  status: "enqueued" | "processing" | "succeeded" | "failed";
   type: string;
   details: any;
   error: any;

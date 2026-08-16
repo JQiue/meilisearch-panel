@@ -1,53 +1,56 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { MeilisearchService } from '../services/meilisearch';
-import { Key } from '../types';
-import { PlusIcon, TrashIcon, ClipboardCopyIcon } from './icons';
+import React, { useState, useEffect, useCallback } from "react";
+
+import { MeilisearchService } from "../services/meilisearch";
+
+import { PlusIcon, TrashIcon, ClipboardCopyIcon } from "./icons";
+
+import type { Key } from "../types";
 
 interface KeyManagementProps {
   service: MeilisearchService;
 }
 
 const KeyCreateModal: React.FC<{
-  onSave: (key: Omit<Key, 'uid' | 'key' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  onSave: (key: Omit<Key, "uid" | "key" | "createdAt" | "updatedAt">) => Promise<void>;
   onCancel: () => void;
 }> = ({ onSave, onCancel }) => {
-  const [description, setDescription] = useState('');
-  const [actions, setActions] = useState('search');
-  const [indexes, setIndexes] = useState('*');
-  const [expiresAt, setExpiresAt] = useState('');
+  const [description, setDescription] = useState("");
+  const [actions, setActions] = useState("search");
+  const [indexes, setIndexes] = useState("*");
+  const [expiresAt, setExpiresAt] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const handleSubmit = async () => {
     if (!description) {
-      setError('Description is required.');
+      setError("Description is required.");
       return;
     }
     setLoading(true);
-    setError('');
+    setError("");
     try {
       await onSave({
         description,
         actions: actions
-          .split(',')
+          .split(",")
           .map((s) => s.trim())
           .filter(Boolean),
         indexes: indexes
-          .split(',')
+          .split(",")
           .map((s) => s.trim())
           .filter(Boolean),
         expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
       });
     } catch (e: any) {
-      setError(e.message || 'Failed to create key.');
+      setError(e.message || "Failed to create key.");
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-lg">
-        <h2 className="text-2xl font-bold mb-4">Create API Key</h2>
+    <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
+      <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+        <h2 className="mb-4 text-2xl font-bold">Create API Key</h2>
         <div className="space-y-4">
           <div>
             <label
@@ -62,7 +65,7 @@ const KeyCreateModal: React.FC<{
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm text-gray-900 dark:text-white dark:bg-gray-700"
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               placeholder="e.g. Frontend search key"
             />
           </div>
@@ -78,7 +81,7 @@ const KeyCreateModal: React.FC<{
               value={actions}
               onChange={(e) => setActions(e.target.value)}
               rows={2}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm text-gray-900 dark:text-white dark:bg-gray-700 font-mono"
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               placeholder="search, documents.add, indexes.create"
             />
           </div>
@@ -94,7 +97,7 @@ const KeyCreateModal: React.FC<{
               value={indexes}
               onChange={(e) => setIndexes(e.target.value)}
               rows={2}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm text-gray-900 dark:text-white dark:bg-gray-700 font-mono"
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               placeholder="*, movies, products"
             />
           </div>
@@ -110,16 +113,16 @@ const KeyCreateModal: React.FC<{
               type="datetime-local"
               value={expiresAt}
               onChange={(e) => setExpiresAt(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm text-gray-900 dark:text-white dark:bg-gray-700"
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             />
           </div>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+          {error && <p className="text-sm text-red-500">{error}</p>}
         </div>
         <div className="mt-6 flex justify-end space-x-3">
           <button
             type="button"
             onClick={onCancel}
-            className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500"
+            className="rounded-md bg-gray-200 px-4 py-2 text-gray-800 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500"
           >
             Cancel
           </button>
@@ -127,9 +130,9 @@ const KeyCreateModal: React.FC<{
             type="button"
             onClick={handleSubmit}
             disabled={loading}
-            className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:bg-red-400"
+            className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:bg-red-400"
           >
-            {loading ? 'Creating...' : 'Create Key'}
+            {loading ? "Creating..." : "Create Key"}
           </button>
         </div>
       </div>
@@ -147,27 +150,27 @@ const NewKeyModal: React.FC<{ apiKey: Key; onClose: () => void }> = ({ apiKey, o
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-lg">
-        <h2 className="text-2xl font-bold mb-2">API Key Created</h2>
-        <p className="text-sm text-yellow-600 dark:text-yellow-400 mb-4">
+    <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
+      <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+        <h2 className="mb-2 text-2xl font-bold">API Key Created</h2>
+        <p className="mb-4 text-sm text-yellow-600 dark:text-yellow-400">
           Please copy this key and store it securely. You will not be able to see it again.
         </p>
-        <div className="relative bg-gray-100 dark:bg-gray-900 rounded p-3 font-mono text-sm break-all">
+        <div className="relative rounded bg-gray-100 p-3 font-mono text-sm break-all dark:bg-gray-900">
           {apiKey.key}
           <button
             onClick={handleCopy}
-            className="absolute top-2 right-2 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+            className="absolute top-2 right-2 rounded p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700"
             aria-label="Copy API Key"
           >
             <ClipboardCopyIcon className="h-5 w-5" />
           </button>
         </div>
-        {copied && <p className="text-green-500 text-xs mt-2">Copied to clipboard!</p>}
+        {copied && <p className="mt-2 text-xs text-green-500">Copied to clipboard!</p>}
         <div className="mt-6 flex justify-end">
           <button
             onClick={onClose}
-            className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+            className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700"
           >
             Done
           </button>
@@ -191,7 +194,7 @@ export const KeyManagement: React.FC<KeyManagementProps> = ({ service }) => {
       const res = await service.getKeys();
       setKeys(res.results);
     } catch (e: any) {
-      setError(e.message || 'Failed to fetch API keys.');
+      setError(e.message || "Failed to fetch API keys.");
     } finally {
       setLoading(false);
     }
@@ -201,7 +204,7 @@ export const KeyManagement: React.FC<KeyManagementProps> = ({ service }) => {
     fetchKeys();
   }, [fetchKeys]);
 
-  const handleCreateKey = async (keyData: Omit<Key, 'uid' | 'key' | 'createdAt' | 'updatedAt'>) => {
+  const handleCreateKey = async (keyData: Omit<Key, "uid" | "key" | "createdAt" | "updatedAt">) => {
     const newKey = await service.createKey(keyData);
     setNewlyCreatedKey(newKey);
     setShowCreateModal(false);
@@ -209,7 +212,7 @@ export const KeyManagement: React.FC<KeyManagementProps> = ({ service }) => {
 
   const handleDeleteKey = async (uid: string) => {
     if (
-      window.confirm('Are you sure you want to delete this API key? This action is irreversible.')
+      window.confirm("Are you sure you want to delete this API key? This action is irreversible.")
     ) {
       try {
         await service.deleteKey(uid);
@@ -230,37 +233,37 @@ export const KeyManagement: React.FC<KeyManagementProps> = ({ service }) => {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <h1 className="text-3xl font-bold">API Keys</h1>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+          className="flex items-center rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700"
         >
-          <PlusIcon className="h-5 w-5 mr-2" />
+          <PlusIcon className="mr-2 h-5 w-5" />
           Create API Key
         </button>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-x-auto">
+      <div className="overflow-x-auto rounded-lg bg-white shadow-md dark:bg-gray-800">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
                 Description
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
                 Key (prefix)
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
                 Actions
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
                 Indexes
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
                 Expires At
               </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-6 py-3 text-right text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
                 Actions
               </th>
             </tr>
@@ -268,16 +271,16 @@ export const KeyManagement: React.FC<KeyManagementProps> = ({ service }) => {
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
             {keys.map((key) => (
               <tr key={key.uid}>
-                <td className="px-6 py-4 max-w-sm break-words">{key.description || '-'}</td>
-                <td className="px-6 py-4 whitespace-nowrap font-mono text-sm">
+                <td className="max-w-sm px-6 py-4 break-words">{key.description || "-"}</td>
+                <td className="px-6 py-4 font-mono text-sm whitespace-nowrap">
                   {key.uid.slice(0, 8)}...
                 </td>
                 <td className="px-6 py-4">
-                  <div className="flex flex-wrap gap-1 max-w-xs">
+                  <div className="flex max-w-xs flex-wrap gap-1">
                     {key.actions.map((action) => (
                       <span
                         key={action}
-                        className="px-2 py-1 text-xs font-mono bg-gray-200 dark:bg-gray-600 rounded break-all"
+                        className="rounded bg-gray-200 px-2 py-1 font-mono text-xs break-all dark:bg-gray-600"
                       >
                         {action}
                       </span>
@@ -285,11 +288,11 @@ export const KeyManagement: React.FC<KeyManagementProps> = ({ service }) => {
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="flex flex-wrap gap-1 max-w-xs">
+                  <div className="flex max-w-xs flex-wrap gap-1">
                     {key.indexes.map((index) => (
                       <span
                         key={index}
-                        className="px-2 py-1 text-xs font-mono bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded break-all"
+                        className="rounded bg-blue-100 px-2 py-1 font-mono text-xs break-all text-blue-800 dark:bg-blue-900 dark:text-blue-200"
                       >
                         {index}
                       </span>
@@ -297,12 +300,12 @@ export const KeyManagement: React.FC<KeyManagementProps> = ({ service }) => {
                   </div>
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                  {key.expiresAt ? new Date(key.expiresAt).toLocaleString() : 'Never'}
+                  {key.expiresAt ? new Date(key.expiresAt).toLocaleString() : "Never"}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <td className="px-6 py-4 text-right text-sm font-medium whitespace-nowrap">
                   <button
                     onClick={() => handleDeleteKey(key.uid)}
-                    className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-200 p-2"
+                    className="p-2 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-200"
                     aria-label={`Delete key ${key.description}`}
                   >
                     <TrashIcon className="h-5 w-5" />
@@ -312,7 +315,7 @@ export const KeyManagement: React.FC<KeyManagementProps> = ({ service }) => {
             ))}
             {keys.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center py-10 text-gray-500 dark:text-gray-400">
+                <td colSpan={6} className="py-10 text-center text-gray-500 dark:text-gray-400">
                   No API keys found. Default keys may be hidden by Meilisearch.
                 </td>
               </tr>

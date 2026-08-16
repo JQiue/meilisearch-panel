@@ -1,5 +1,6 @@
-import React, { useState, useCallback } from 'react';
-import { MeilisearchService } from '../services/meilisearch';
+import React, { useState, useCallback } from "react";
+
+import { MeilisearchService } from "../services/meilisearch";
 
 interface SearchPlaygroundProps {
   indexUid: string;
@@ -7,10 +8,10 @@ interface SearchPlaygroundProps {
 }
 
 export const SearchPlayground: React.FC<SearchPlaygroundProps> = ({ indexUid, service }) => {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(20);
-  const [filter, setFilter] = useState('');
-  const [sort, setSort] = useState('');
+  const [filter, setFilter] = useState("");
+  const [sort, setSort] = useState("");
 
   const [results, setResults] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -24,12 +25,12 @@ export const SearchPlayground: React.FC<SearchPlaygroundProps> = ({ indexUid, se
     try {
       const options: any = { limit };
       if (filter) options.filter = filter;
-      if (sort) options.sort = sort.split(',').map((s) => s.trim());
+      if (sort) options.sort = sort.split(",").map((s) => s.trim());
 
       const res = await service.search(indexUid, query, options);
       setResults(res);
     } catch (e: any) {
-      setError(e.message || 'Failed to perform search.');
+      setError(e.message || "Failed to perform search.");
       setResults({ error: e.message });
     } finally {
       setLoading(false);
@@ -37,9 +38,9 @@ export const SearchPlayground: React.FC<SearchPlaygroundProps> = ({ indexUid, se
   }, [indexUid, service, query, limit, filter, sort]);
 
   return (
-    <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-1 bg-white dark:bg-gray-800 shadow-md rounded-lg p-6 space-y-4 h-min">
-        <h2 className="text-2xl font-bold mb-4">Search Parameters</h2>
+    <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="h-min space-y-4 rounded-lg bg-white p-6 shadow-md lg:col-span-1 dark:bg-gray-800">
+        <h2 className="mb-4 text-2xl font-bold">Search Parameters</h2>
 
         <div>
           <label
@@ -54,7 +55,7 @@ export const SearchPlayground: React.FC<SearchPlaygroundProps> = ({ indexUid, se
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search for..."
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm text-gray-900 dark:text-white dark:bg-gray-700"
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
           />
         </div>
 
@@ -70,7 +71,7 @@ export const SearchPlayground: React.FC<SearchPlaygroundProps> = ({ indexUid, se
             id="limit"
             value={limit}
             onChange={(e) => setLimit(parseInt(e.target.value, 10))}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm text-gray-900 dark:text-white dark:bg-gray-700"
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
           />
         </div>
 
@@ -87,7 +88,7 @@ export const SearchPlayground: React.FC<SearchPlaygroundProps> = ({ indexUid, se
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="e.g. genre = 'sci-fi'"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm text-gray-900 dark:text-white dark:bg-gray-700 font-mono"
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
           />
         </div>
 
@@ -104,23 +105,23 @@ export const SearchPlayground: React.FC<SearchPlaygroundProps> = ({ indexUid, se
             value={sort}
             onChange={(e) => setSort(e.target.value)}
             placeholder="e.g. price:asc, rating:desc"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm text-gray-900 dark:text-white dark:bg-gray-700 font-mono"
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
           />
         </div>
 
         <button
           onClick={handleSearch}
           disabled={loading}
-          className="w-full bg-red-600 text-white px-6 py-2 rounded-md hover:bg-red-700 disabled:bg-red-400"
+          className="w-full rounded-md bg-red-600 px-6 py-2 text-white hover:bg-red-700 disabled:bg-red-400"
         >
-          {loading ? 'Searching...' : 'Search'}
+          {loading ? "Searching..." : "Search"}
         </button>
       </div>
 
-      <div className="lg:col-span-2 bg-white dark:bg-gray-800 shadow-md rounded-lg p-6">
-        <h2 className="text-2xl font-bold mb-4">Results</h2>
+      <div className="rounded-lg bg-white p-6 shadow-md lg:col-span-2 dark:bg-gray-800">
+        <h2 className="mb-4 text-2xl font-bold">Results</h2>
         {results && (
-          <div className="flex space-x-4 mb-4 text-sm text-gray-500 dark:text-gray-400">
+          <div className="mb-4 flex space-x-4 text-sm text-gray-500 dark:text-gray-400">
             {results.processingTimeMs != null && (
               <span>
                 Time: <strong>{results.processingTimeMs}ms</strong>
@@ -133,11 +134,11 @@ export const SearchPlayground: React.FC<SearchPlaygroundProps> = ({ indexUid, se
             )}
           </div>
         )}
-        <div className="bg-gray-100 dark:bg-gray-900 p-4 rounded-md">
-          <pre className="text-xs whitespace-pre-wrap break-all h-[60vh] overflow-auto">
-            {loading && 'Loading...'}
+        <div className="rounded-md bg-gray-100 p-4 dark:bg-gray-900">
+          <pre className="h-[60vh] overflow-auto text-xs break-all whitespace-pre-wrap">
+            {loading && "Loading..."}
             {error && `Error: ${error}`}
-            {results ? JSON.stringify(results, null, 2) : 'Perform a search to see results here.'}
+            {results ? JSON.stringify(results, null, 2) : "Perform a search to see results here."}
           </pre>
         </div>
       </div>
