@@ -1,18 +1,42 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { Meilisearch } from "meilisearch";
+import { version as sdkVersion } from "meilisearch/package.json";
+import React, { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { MeilisearchService } from "../services/meilisearch";
+import type { InstanceStats, VersionInfo } from "../types";
 
-import type { VersionInfo, InstanceStats } from "../types";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface InstanceOverviewProps {
-  service: MeilisearchService;
+  service: Meilisearch;
 }
 
-const StatCard: React.FC<{ title: string; value: string }> = ({ title, value }) => (
-  <div className="rounded-lg bg-white p-6 shadow-md dark:bg-gray-800">
-    <h3 className="truncate text-sm font-medium text-gray-500 dark:text-gray-400">{title}</h3>
-    <p className="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">{value}</p>
-  </div>
+const StatCard: React.FC<{ title: string; value: string; subtitle?: string }> = ({
+  title,
+  value,
+  subtitle,
+}) => (
+  <Card>
+    <CardHeader>
+      <CardDescription>{title}</CardDescription>
+      <CardTitle className="truncate text-3xl font-semibold">{value}</CardTitle>
+      {subtitle && (
+        <CardDescription className="truncate font-mono text-xs" title={subtitle}>
+          {subtitle}
+        </CardDescription>
+      )}
+    </CardHeader>
+  </Card>
 );
 
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -25,6 +49,7 @@ const formatBytes = (bytes: number, decimals = 2) => {
 };
 
 export const InstanceOverview: React.FC<InstanceOverviewProps> = ({ service }) => {
+  const { t } = useTranslation();
   const [version, setVersion] = useState<VersionInfo | null>(null);
   const [stats, setStats] = useState<InstanceStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,70 +61,107 @@ export const InstanceOverview: React.FC<InstanceOverviewProps> = ({ service }) =
     try {
       const [versionData, statsData] = await Promise.all([
         service.getVersion(),
-        service.getInstanceStats(),
+        service.getStats(),
       ]);
-      setVersion(versionData);
+      setVersion({
+        commitSha: versionData.commitSha,
+        buildDate: versionData.commitDate,
+        pkgVersion: versionData.pkgVersion,
+      });
       setStats(statsData);
     } catch (e: any) {
-      setError(e.message || "Failed to fetch instance overview.");
+      setError(e.message || t("overview.fetchFailed"));
     } finally {
       setLoading(false);
     }
-  }, [service]);
+  }, [service, t]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  if (loading) return <div>Loading instance overview...</div>;
-  if (error) return <div className="text-red-500">{error}</div>;
-  if (!version || !stats) return <div>No data available.</div>;
+  if (loading)
+    return (
+      <div>
+        <Skeleton className="mb-6 h-9 w-64" />
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  if (error) return <div className="text-destructive">{error}</div>;
+  if (!version || !stats) return <div className="text-muted-foreground">{t("common.noData")}</div>;
+
+  const totalDocuments = Object.values(stats.indexes).reduce(
+    (sum, indexStats) => sum + indexStats.numberOfDocuments,
+    0,
+  );
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-bold">Instance Overview</h1>
+      <h1 className="mb-6 text-3xl font-bold">{t("overview.title")}</h1>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <StatCard title="Meilisearch Version" value={version.pkgVersion} />
-        <StatCard title="Database Size" value={formatBytes(stats.databaseSize)} />
-        <StatCard title="Last Updated" value={new Date(stats.lastUpdate).toLocaleString()} />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title={t("overview.instanceVersion")}
+          value={version.pkgVersion}
+          subtitle={`commit ${version.commitSha.slice(0, 8)} · ${new Date(version.buildDate).toLocaleDateString()}`}
+        />
+        <StatCard title={t("overview.sdkVersion")} value={sdkVersion} />
+        <StatCard title={t("overview.databaseSize")} value={formatBytes(stats.databaseSize)} />
+        <StatCard title={t("overview.usedDbSize")} value={formatBytes(stats.usedDatabaseSize)} />
+        <StatCard title={t("overview.indexes")} value={String(Object.keys(stats.indexes).length)} />
+        <StatCard title={t("overview.totalDocuments")} value={totalDocuments.toLocaleString()} />
+        <StatCard
+          title={t("overview.lastUpdated")}
+          value={new Date(stats.lastUpdate).toLocaleString()}
+        />
       </div>
 
       <div className="mt-8">
-        <h2 className="mb-4 text-2xl font-bold">Index Summary</h2>
-        <div className="rounded-lg bg-white shadow-md dark:bg-gray-800">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-700">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                  Index UID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                  Number of Documents
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {Object.entries(stats.indexes).map(([uid, indexStats]) => (
-                <tr key={uid}>
-                  <td className="px-6 py-4 font-mono whitespace-nowrap text-red-600 dark:text-red-400">
-                    {uid}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {indexStats.numberOfDocuments.toLocaleString()}
-                  </td>
-                </tr>
-              ))}
-              {Object.keys(stats.indexes).length === 0 && (
-                <tr>
-                  <td colSpan={2} className="py-10 text-center text-gray-500 dark:text-gray-400">
-                    No indexes found on this instance.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("overview.indexStatus")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("overview.indexUid")}</TableHead>
+                  <TableHead>{t("common.status")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Object.entries(stats.indexes).map(([uid, indexStats]) => (
+                  <TableRow key={uid}>
+                    <TableCell className="text-primary font-mono whitespace-nowrap">
+                      {uid}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {indexStats.isIndexing ? (
+                        <Badge variant="outline" className="gap-1.5">
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
+                          {t("overview.indexing")}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">{t("overview.idle")}</Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {Object.keys(stats.indexes).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-muted-foreground h-24 text-center">
+                      {t("overview.noIndexes")}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

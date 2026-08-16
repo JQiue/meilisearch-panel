@@ -1,128 +1,97 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { createRouter, RouterProvider } from "@tanstack/react-router";
+import { Meilisearch } from "meilisearch";
+import React, { useEffect, useSyncExternalStore } from "react";
 
-import { ConnectionScreen } from "./components/ConnectionScreen";
-import { Dashboard } from "./components/Dashboard";
-import { MeilisearchService } from "./services/meilisearch";
+import { generateUUID } from "./helper";
+import { routeTree } from "./routeTree.gen";
 
 import type { StoredConnection } from "./types";
 
 const STORAGE_KEY = "meilisearch-connections";
 
-// Function to generate a UUID, compatible with HTTP and HTTPS contexts.
-function generateUUID() {
-  // Use crypto.randomUUID if available (in secure contexts)
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
+let connections: StoredConnection[] = loadFromStorage();
+const listeners = new Set<() => void>();
+
+function loadFromStorage(): StoredConnection[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (e) {
+    console.error("Failed to load connections from localStorage", e);
+    return [];
   }
-  // Fallback for non-secure contexts
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+}
+
+function persist(next: StoredConnection[]) {
+  connections = next;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  listeners.forEach((l) => l());
+}
+
+export function useConnections(): StoredConnection[] {
+  return useSyncExternalStore(
+    (cb) => {
+      listeners.add(cb);
+      return () => {
+        listeners.delete(cb);
+      };
+    },
+    () => connections,
+  );
+}
+
+export interface RouterContext {
+  connections: StoredConnection[];
+  addConnection: (data: Omit<StoredConnection, "id">) => Promise<StoredConnection>;
+  updateConnection: (conn: StoredConnection) => Promise<StoredConnection>;
+  deleteConnection: (id: string) => void;
+}
+
+async function assertHealthy(host: string, apiKey: string) {
+  const client = new Meilisearch({ host, apiKey });
+  const health = await client.health();
+  if (health.status !== "available") {
+    throw new Error("Meilisearch is not available. Status: " + health.status);
+  }
+}
+
+export const router = createRouter({
+  routeTree,
+  defaultPreload: "intent",
+  scrollRestoration: true,
+  context: {
+    connections,
+    addConnection: async (data) => {
+      await assertHealthy(data.host, data.apiKey);
+      const connection = { ...data, id: generateUUID() };
+      persist([...connections, connection]);
+      return connection;
+    },
+    updateConnection: async (updated) => {
+      await assertHealthy(updated.host, updated.apiKey);
+      persist(connections.map((c) => (c.id === updated.id ? updated : c)));
+      return updated;
+    },
+    deleteConnection: (id) => {
+      persist(connections.filter((c) => c.id !== id));
+    },
+  },
+});
+
+declare module "@tanstack/react-router" {
+  interface Register {
+    router: typeof router;
+  }
 }
 
 export const App: React.FC = () => {
-  const [connections, setConnections] = useState<StoredConnection[]>([]);
-  const [activeConnection, setActiveConnection] = useState<StoredConnection | null>(null);
+  const conns = useConnections();
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setConnections(JSON.parse(stored));
-      }
-    } catch (e) {
-      console.error("Failed to load connections from localStorage", e);
-    }
-  }, []);
+    router.update({ context: { ...router.options.context, connections: conns } });
+  }, [conns]);
 
-  const saveConnections = (updatedConnections: StoredConnection[]) => {
-    setConnections(updatedConnections);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedConnections));
-  };
-
-  const meilisearchService = useMemo(() => {
-    if (activeConnection) {
-      return new MeilisearchService(activeConnection.host, activeConnection.apiKey);
-    }
-    return null;
-  }, [activeConnection]);
-
-  const handleConnect = useCallback((connection: StoredConnection) => {
-    setActiveConnection(connection);
-  }, []);
-
-  const handleDisconnect = useCallback(() => {
-    setActiveConnection(null);
-  }, []);
-
-  const handleAddConnection = useCallback(
-    async (newConnection: Omit<StoredConnection, "id">): Promise<StoredConnection> => {
-      const service = new MeilisearchService(newConnection.host, newConnection.apiKey);
-      const health = await service.getHealth();
-      if (health.status !== "available") {
-        throw new Error("Meilisearch is not available. Status: " + health.status);
-      }
-
-      const connectionWithId = { ...newConnection, id: generateUUID() };
-      const updatedConnections = [...connections, connectionWithId];
-      saveConnections(updatedConnections);
-      return connectionWithId;
-    },
-    [connections],
-  );
-
-  const handleUpdateConnection = useCallback(
-    async (updatedConnection: StoredConnection): Promise<StoredConnection> => {
-      const service = new MeilisearchService(updatedConnection.host, updatedConnection.apiKey);
-      const health = await service.getHealth();
-      if (health.status !== "available") {
-        throw new Error("Meilisearch is not available. Status: " + health.status);
-      }
-
-      const updatedConnections = connections.map((c) =>
-        c.id === updatedConnection.id ? updatedConnection : c,
-      );
-      saveConnections(updatedConnections);
-
-      if (activeConnection?.id === updatedConnection.id) {
-        setActiveConnection(updatedConnection);
-      }
-      return updatedConnection;
-    },
-    [connections, activeConnection],
-  );
-
-  const handleDeleteConnection = useCallback(
-    (id: string) => {
-      const updatedConnections = connections.filter((c) => c.id !== id);
-      saveConnections(updatedConnections);
-    },
-    [connections],
-  );
-
-  if (!activeConnection || !meilisearchService) {
-    return (
-      <ConnectionScreen
-        connections={connections}
-        onConnect={handleConnect}
-        onAdd={handleAddConnection}
-        onDelete={handleDeleteConnection}
-        onUpdate={handleUpdateConnection}
-      />
-    );
-  }
-
-  return (
-    <Dashboard
-      service={meilisearchService}
-      connection={activeConnection}
-      onDisconnect={handleDisconnect}
-      allConnections={connections}
-      onSwitchInstance={handleConnect}
-    />
-  );
+  return <RouterProvider router={router} />;
 };
 
 export default App;

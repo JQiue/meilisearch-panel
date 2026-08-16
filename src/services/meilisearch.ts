@@ -129,6 +129,19 @@ export class MeilisearchService {
     });
   deleteKey = (uid: string): Promise<void> =>
     this.request<void>(`/keys/${uid}`, { method: "DELETE" });
+  updateKey = (
+    uid: string,
+    options: {
+      description?: string;
+      actions?: string[];
+      indexes?: string[];
+      expiresAt?: string | null;
+    },
+  ): Promise<Key> =>
+    this.request<Key>(`/keys/${uid}`, {
+      method: "PATCH",
+      body: JSON.stringify(options),
+    });
 
   // Instance
   getVersion = (): Promise<VersionInfo> => this.request<VersionInfo>("/version");

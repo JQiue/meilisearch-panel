@@ -1,27 +1,43 @@
-import React, { useState, useMemo } from "react";
-
-import { MeilisearchService } from "../services/meilisearch";
-
-import { PlusIcon, CheckCircleIcon } from "./icons";
+import { CheckCircle2, Plus } from "lucide-react";
+import { Meilisearch } from "meilisearch";
+import React, { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { Task } from "../types";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
 interface DumpsProps {
-  service: MeilisearchService;
+  service: Meilisearch;
   tasks: Task[];
   refreshTasks: () => void;
 }
 
-const statusColorMap: Record<Task["status"], string> = {
-  enqueued: "bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-200",
-  processing: "bg-blue-200 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  succeeded: "bg-green-200 text-green-800 dark:bg-green-900 dark:text-green-200",
-  failed: "bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200",
+const statusVariantMap: Record<
+  Task["status"],
+  "secondary" | "outline" | "default" | "destructive"
+> = {
+  enqueued: "secondary",
+  processing: "outline",
+  succeeded: "default",
+  failed: "destructive",
+  canceled: "secondary",
 };
 
 export const Dumps: React.FC<DumpsProps> = ({ service, tasks, refreshTasks }) => {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
 
   const dumpTasks = useMemo(() => {
     return tasks.filter((task) => task.type === "dumpCreation").sort((a, b) => b.uid - a.uid);
@@ -30,15 +46,17 @@ export const Dumps: React.FC<DumpsProps> = ({ service, tasks, refreshTasks }) =>
   const handleCreateDump = async () => {
     setLoading(true);
     setMessage("");
+    setIsError(false);
     try {
       await service.createDump();
-      setMessage("Dump creation task has been enqueued successfully.");
+      setMessage(t("dumps.enqueued"));
       setTimeout(() => {
         setMessage("");
         refreshTasks();
       }, 3000);
     } catch (e: any) {
-      setMessage(`Error: ${e.message}`);
+      setMessage(t("dumps.createFailed") + ": " + e.message);
+      setIsError(true);
     } finally {
       setLoading(false);
     }
@@ -47,83 +65,60 @@ export const Dumps: React.FC<DumpsProps> = ({ service, tasks, refreshTasks }) =>
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Dumps</h1>
-        <button
-          onClick={handleCreateDump}
-          disabled={loading}
-          className="flex items-center rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:bg-red-400"
-        >
-          <PlusIcon className="mr-2 h-5 w-5" />
-          {loading ? "Requesting..." : "Create Dump"}
-        </button>
+        <h1 className="text-3xl font-bold">{t("dumps.title")}</h1>
+        <Button onClick={handleCreateDump} disabled={loading}>
+          <Plus />
+          {loading ? t("dumps.requesting") : t("dumps.createDump")}
+        </Button>
       </div>
 
       {message && (
         <div
           className={`mb-4 flex items-center rounded-md p-3 text-sm ${
-            message.startsWith("Error")
-              ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-              : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+            isError ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
           }`}
         >
-          <CheckCircleIcon className="mr-2 h-5 w-5" />
+          <CheckCircle2 className="mr-2 h-5 w-5" />
           {message}
         </div>
       )}
 
-      <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-        Dumps are snapshots of your Meilisearch instance. They can be used for backups and
-        migrations. Creating a dump is an asynchronous task.
-      </p>
+      <p className="text-muted-foreground mb-4 text-sm">{t("dumps.description")}</p>
 
-      <div className="rounded-lg bg-white shadow-md dark:bg-gray-800">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-700">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                Task UID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                Duration
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                Finished At
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+      <div className="bg-card rounded-lg border shadow-sm">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("dumps.taskUid")}</TableHead>
+              <TableHead>{t("common.status")}</TableHead>
+              <TableHead>{t("common.duration")}</TableHead>
+              <TableHead>{t("dumps.finishedAt")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {dumpTasks.map((task) => (
-              <tr key={task.uid}>
-                <td className="px-6 py-4 whitespace-nowrap">{task.uid}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span
-                    className={`inline-flex rounded-full px-2 text-xs leading-5 font-semibold ${
-                      statusColorMap[task.status]
-                    }`}
-                  >
-                    {task.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm whitespace-nowrap">{task.duration}</td>
-                <td className="px-6 py-4 text-sm whitespace-nowrap">
-                  {task.status !== "enqueued" && task.status !== "processing"
+              <TableRow key={task.uid}>
+                <TableCell className="whitespace-nowrap">{task.uid}</TableCell>
+                <TableCell className="whitespace-nowrap">
+                  <Badge variant={statusVariantMap[task.status]}>{task.status}</Badge>
+                </TableCell>
+                <TableCell className="text-sm whitespace-nowrap">{task.duration}</TableCell>
+                <TableCell className="text-sm whitespace-nowrap">
+                  {task.finishedAt && task.status !== "enqueued" && task.status !== "processing"
                     ? new Date(task.finishedAt).toLocaleString()
                     : "-"}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
             {dumpTasks.length === 0 && (
-              <tr>
-                <td colSpan={4} className="py-10 text-center text-gray-500 dark:text-gray-400">
-                  No dump creation tasks found.
-                </td>
-              </tr>
+              <TableRow>
+                <TableCell colSpan={4} className="text-muted-foreground h-24 text-center">
+                  {t("dumps.empty")}
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

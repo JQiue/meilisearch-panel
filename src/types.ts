@@ -6,7 +6,7 @@ export interface Index {
   uid: string;
   createdAt: string;
   updatedAt: string;
-  primaryKey: string | null;
+  primaryKey?: string | null;
 }
 
 export interface IndexStats {
@@ -17,15 +17,15 @@ export interface IndexStats {
 
 export interface Task {
   uid: number;
-  indexUid: string;
-  status: "enqueued" | "processing" | "succeeded" | "failed";
+  indexUid: string | null;
+  status: "enqueued" | "processing" | "succeeded" | "failed" | "canceled";
   type: string;
-  details: any;
+  details?: any;
   error: any;
-  duration: string;
+  duration: string | null;
   enqueuedAt: string;
-  startedAt: string;
-  finishedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
 }
 
 export interface TasksResult {
@@ -36,14 +36,14 @@ export interface TasksResult {
 }
 
 export interface Settings {
-  displayedAttributes: string[];
-  searchableAttributes: string[];
-  filterableAttributes: string[];
-  sortableAttributes: string[];
-  rankingRules: string[];
-  stopWords: string[];
-  synonyms: Record<string, string[]>;
-  distinctAttribute: string | null;
+  displayedAttributes?: string[] | null;
+  searchableAttributes?: string[] | null;
+  filterableAttributes?: string[] | null;
+  sortableAttributes?: string[] | null;
+  rankingRules?: string[] | null;
+  stopWords?: string[] | null;
+  synonyms?: Record<string, string[]> | null;
+  distinctAttribute?: string | null;
   [key: string]: any;
 }
 
@@ -57,12 +57,13 @@ export interface StoredConnection {
 export interface Key {
   uid: string;
   description: string;
+  name: string | null;
   key: string; // Only available on creation
   actions: string[];
   indexes: string[];
-  expiresAt: string | null;
-  createdAt: string;
-  updatedAt: string;
+  expiresAt: string | Date | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
 }
 
 export interface VersionInfo {
@@ -73,10 +74,12 @@ export interface VersionInfo {
 
 export interface InstanceStats {
   databaseSize: number;
+  usedDatabaseSize: number;
   lastUpdate: string;
   indexes: {
     [uid: string]: {
       numberOfDocuments: number;
+      isIndexing: boolean;
     };
   };
 }

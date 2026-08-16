@@ -1,146 +1,420 @@
-import React, { useState, useEffect, useCallback } from "react";
-
-import { MeilisearchService } from "../services/meilisearch";
-
-import { PlusIcon, TrashIcon, ClipboardCopyIcon } from "./icons";
+import {
+  Check,
+  ChevronsUpDown,
+  ClipboardCopy,
+  Copy,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import { Meilisearch } from "meilisearch";
+import React, { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { Key } from "../types";
+import type { TFunction } from "i18next";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 interface KeyManagementProps {
-  service: MeilisearchService;
+  service: Meilisearch;
 }
 
-const KeyCreateModal: React.FC<{
-  onSave: (key: Omit<Key, "uid" | "key" | "createdAt" | "updatedAt">) => Promise<void>;
+/** Meilisearch 标准 API key actions */
+const ALL_ACTIONS = [
+  "search",
+  "documents.add",
+  "documents.get",
+  "documents.delete",
+  "indexes.create",
+  "indexes.get",
+  "indexes.update",
+  "indexes.delete",
+  "tasks.get",
+  "tasks.cancel",
+  "tasks.delete",
+  "settings.get",
+  "settings.update",
+  "stats.get",
+  "dumps.create",
+  "version",
+  "keys.get",
+  "keys.create",
+  "keys.update",
+  "keys.delete",
+  "metrics.get",
+  "experimental.features.get",
+  "experimental.features.update",
+] as const;
+
+type ActionName = (typeof ALL_ACTIONS)[number];
+
+/** 每个 action 的作用说明 → i18n key（来源：Meilisearch 官方文档 Available Actions） */
+const ACTION_HELPERS: Record<ActionName, string> = {
+  search: "keys.action_search",
+  "documents.add": "keys.action_documentsAdd",
+  "documents.get": "keys.action_documentsGet",
+  "documents.delete": "keys.action_documentsDelete",
+  "indexes.create": "keys.action_indexesCreate",
+  "indexes.get": "keys.action_indexesGet",
+  "indexes.update": "keys.action_indexesUpdate",
+  "indexes.delete": "keys.action_indexesDelete",
+  "tasks.get": "keys.action_tasksGet",
+  "tasks.cancel": "keys.action_tasksCancel",
+  "tasks.delete": "keys.action_tasksDelete",
+  "settings.get": "keys.action_settingsGet",
+  "settings.update": "keys.action_settingsUpdate",
+  "stats.get": "keys.action_statsGet",
+  "dumps.create": "keys.action_dumpsCreate",
+  version: "keys.action_version",
+  "keys.get": "keys.action_keysGet",
+  "keys.create": "keys.action_keysCreate",
+  "keys.update": "keys.action_keysUpdate",
+  "keys.delete": "keys.action_keysDelete",
+  "metrics.get": "keys.action_metricsGet",
+  "experimental.features.get": "keys.action_experimentalFeaturesGet",
+  "experimental.features.update": "keys.action_experimentalFeaturesUpdate",
+};
+
+/** 相对时间：x 天/月/年前 */
+function timeAgo(date: string | Date, t: TFunction): string {
+  const diff = Date.now() - new Date(date).getTime();
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor(diff / 3600000);
+  if (days >= 365) return t("common.timeYearsAgo", { count: Math.floor(days / 365) });
+  if (days >= 30) return t("common.timeMonthsAgo", { count: Math.floor(days / 30) });
+  if (days > 0) return t("common.timeDaysAgo", { count: days });
+  if (hours > 0) return t("common.timeHoursAgo", { count: hours });
+  return t("common.timeJustNow");
+}
+
+/** 相对时间：还有多久过期 */
+function timeUntil(date: string | Date, t: TFunction): string {
+  const diff = new Date(date).getTime() - Date.now();
+  const days = Math.ceil(diff / 86400000);
+  if (days <= 0) return t("keys.expired");
+  if (days === 1) return t("keys.expiresTomorrow");
+  if (days < 30) return t("keys.expiresInDays", { count: days });
+  return t("keys.expiresMonths", { count: Math.ceil(days / 30) });
+}
+
+/** ISO 时间字符串/Date → datetime-local input 值（本地时区，分钟精度） */
+function toLocalDatetime(iso: string | Date): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** 多选下拉（Popover + Command） */
+const MultiSelect: React.FC<{
+  options: string[];
+  value: string[];
+  onChange: (value: string[]) => void;
+  placeholder?: string;
+  emptyText?: string;
+  loading?: boolean;
+  helperMap?: Record<string, string>;
+}> = ({
+  options,
+  value,
+  onChange,
+  placeholder = "Select...",
+  emptyText = "No options found.",
+  loading,
+  helperMap,
+}) => {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+
+  const toggle = (option: string) => {
+    onChange(value.includes(option) ? value.filter((v) => v !== option) : [...value, option]);
+  };
+
+  const remove = (option: string) => {
+    onChange(value.filter((v) => v !== option));
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="h-auto min-h-9 w-full justify-between font-normal"
+          />
+        }
+      >
+        {value.length === 0 ? (
+          <span className="text-muted-foreground">{placeholder}</span>
+        ) : (
+          <span className="flex flex-wrap gap-1">
+            {value.map((v) => (
+              <span
+                key={v}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  remove(v);
+                }}
+                className="bg-muted hover:bg-destructive/20 flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 font-mono text-xs"
+              >
+                {v}
+                <X className="h-3 w-3" />
+              </span>
+            ))}
+          </span>
+        )}
+        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+      </PopoverTrigger>
+      <PopoverContent className={cn("w-full p-0", helperMap && "min-w-80!")} align="start">
+        <Command>
+          <CommandInput placeholder={t("keys.searchPlaceholder")} />
+          <CommandList>
+            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandGroup>
+              {loading ? (
+                <div className="text-muted-foreground flex items-center justify-center gap-2 py-6 text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t("common.loading")}
+                </div>
+              ) : (
+                options.map((option) => (
+                  <CommandItem
+                    key={option}
+                    value={option}
+                    onSelect={() => toggle(option)}
+                    className="cursor-pointer"
+                  >
+                    <Check
+                      className={cn(
+                        "h-4 w-4 shrink-0",
+                        value.includes(option) ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                      <span className="font-mono text-xs">{option}</span>
+                      {helperMap?.[option] && (
+                        <span className="text-muted-foreground truncate text-xs">
+                          {t(helperMap[option])}
+                        </span>
+                      )}
+                    </span>
+                  </CommandItem>
+                ))
+              )}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+const KeyCreateForm: React.FC<{
+  service: Meilisearch;
+  initialData?: Key | null;
+  onSave: (key: any) => Promise<void>;
   onCancel: () => void;
-}> = ({ onSave, onCancel }) => {
-  const [description, setDescription] = useState("");
-  const [actions, setActions] = useState("search");
-  const [indexes, setIndexes] = useState("*");
-  const [expiresAt, setExpiresAt] = useState("");
+}> = ({ service, initialData, onSave, onCancel }) => {
+  const { t } = useTranslation();
+  const isEditing = !!initialData;
+  const [uid, setUid] = useState("");
+  const [name, setName] = useState(initialData?.name || "");
+  const [description, setDescription] = useState(initialData?.description || "");
+  const [actions, setActions] = useState<ActionName[]>(
+    (initialData?.actions as ActionName[]) || ["search"],
+  );
+  const [indexes, setIndexes] = useState<string[]>(initialData?.indexes || ["*"]);
+  const [availableIndexes, setAvailableIndexes] = useState<string[]>([]);
+  const [indexesLoading, setIndexesLoading] = useState(true);
+  const [expiresAt, setExpiresAt] = useState(
+    initialData?.expiresAt ? toLocalDatetime(initialData.expiresAt) : "",
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    service
+      .getRawIndexes()
+      .then((res) => setAvailableIndexes(res.results.map((i) => i.uid)))
+      .catch(() => setAvailableIndexes([]))
+      .finally(() => setIndexesLoading(false));
+  }, [service]);
+
   const handleSubmit = async () => {
     if (!description) {
-      setError("Description is required.");
+      setError(t("keys.descRequired"));
+      return;
+    }
+    if (!isEditing && actions.length === 0) {
+      setError(t("keys.selectAtLeastAction"));
+      return;
+    }
+    if (!isEditing && indexes.length === 0) {
+      setError(t("keys.selectAtLeastIndex"));
       return;
     }
     setLoading(true);
     setError("");
     try {
-      await onSave({
-        description,
-        actions: actions
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        indexes: indexes
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
-      });
+      if (isEditing) {
+        // Meilisearch API 仅支持更新 name 与 description
+        await onSave({ name: name || undefined, description });
+      } else {
+        await onSave({
+          uid: uid || undefined,
+          name: name || undefined,
+          description,
+          actions: [...actions],
+          indexes,
+          expiresAt: expiresAt ? new Date(expiresAt) : null,
+        });
+      }
     } catch (e: any) {
-      setError(e.message || "Failed to create key.");
+      setError(e.message || t("keys.saveFailed"));
       setLoading(false);
     }
   };
 
   return (
-    <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
-      <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-        <h2 className="mb-4 text-2xl font-bold">Create API Key</h2>
-        <div className="space-y-4">
-          <div>
-            <label
-              htmlFor="key-desc"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-            >
-              Description
-            </label>
-            {/* FIX: Replaced custom 'input' class with standard Tailwind CSS classes and removed <style jsx> tag. */}
-            <input
-              id="key-desc"
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              placeholder="e.g. Frontend search key"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="key-actions"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-            >
-              Actions (comma-separated)
-            </label>
-            <textarea
-              id="key-actions"
+    <div className="space-y-4">
+      {!isEditing && (
+        <div className="space-y-2">
+          <Label htmlFor="key-uid">{t("keys.uidOptional")}</Label>
+          <Input
+            id="key-uid"
+            type="text"
+            value={uid}
+            onChange={(e) => setUid(e.target.value)}
+            placeholder={t("keys.autoGenerated")}
+            className="font-mono"
+          />
+        </div>
+      )}
+      <div className="space-y-2">
+        <Label htmlFor="key-name">{t("keys.nameOptional")}</Label>
+        <Input
+          id="key-name"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={t("keys.namePlaceholder")}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="key-desc">{t("keys.description")}</Label>
+        <Input
+          id="key-desc"
+          type="text"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder={t("keys.descPlaceholder")}
+        />
+      </div>
+
+      {!isEditing && (
+        <>
+          <div className="space-y-2">
+            <Label>{t("common.actions")}</Label>
+            <MultiSelect
+              options={[...ALL_ACTIONS]}
               value={actions}
-              onChange={(e) => setActions(e.target.value)}
-              rows={2}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              placeholder="search, documents.add, indexes.create"
+              onChange={(v) => setActions(v as ActionName[])}
+              placeholder={t("keys.selectActions")}
+              emptyText={t("keys.noMatchingAction")}
+              helperMap={ACTION_HELPERS}
             />
+            <p className="text-muted-foreground text-xs">
+              {actions.length === 0
+                ? t("keys.selectAtLeastAction")
+                : t("keys.actionsSelected", { count: actions.length, list: actions.join(", ") })}
+            </p>
           </div>
-          <div>
-            <label
-              htmlFor="key-indexes"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-            >
-              Indexes (comma-separated)
-            </label>
-            <textarea
-              id="key-indexes"
+
+          <div className="space-y-2">
+            <Label>{t("keys.indexes")}</Label>
+            <MultiSelect
+              options={["*", ...availableIndexes]}
               value={indexes}
-              onChange={(e) => setIndexes(e.target.value)}
-              rows={2}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              placeholder="*, movies, products"
+              onChange={setIndexes}
+              placeholder={t("keys.selectIndexes")}
+              emptyText={indexesLoading ? t("common.loading") : t("keys.noOptions")}
+              loading={indexesLoading}
             />
+            <p className="text-muted-foreground text-xs">
+              {indexes.length === 0
+                ? t("keys.selectAtLeastIndex")
+                : t("keys.actionsSelected", { count: indexes.length, list: indexes.join(", ") })}
+            </p>
           </div>
-          <div>
-            <label
-              htmlFor="key-expires"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-            >
-              Expires At (optional)
-            </label>
-            <input
+
+          <div className="space-y-2">
+            <Label htmlFor="key-expires">{t("keys.expires")} (optional)</Label>
+            <Input
               id="key-expires"
               type="datetime-local"
               value={expiresAt}
               onChange={(e) => setExpiresAt(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-red-500 focus:ring-red-500 focus:outline-none sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             />
           </div>
-          {error && <p className="text-sm text-red-500">{error}</p>}
-        </div>
-        <div className="mt-6 flex justify-end space-x-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-md bg-gray-200 px-4 py-2 text-gray-800 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={loading}
-            className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:bg-red-400"
-          >
-            {loading ? "Creating..." : "Create Key"}
-          </button>
-        </div>
-      </div>
+        </>
+      )}
+
+      {isEditing && <p className="text-muted-foreground text-xs">{t("keys.editNote")}</p>}
+      {error && <p className="text-destructive text-sm">{error}</p>}
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          {t("common.cancel")}
+        </Button>
+        <Button type="button" onClick={handleSubmit} disabled={loading}>
+          {loading
+            ? isEditing
+              ? t("settings.saving")
+              : t("keys.creating")
+            : isEditing
+              ? t("settings.saveChanges")
+              : t("keys.createKey")}
+        </Button>
+      </DialogFooter>
     </div>
   );
 };
 
-const NewKeyModal: React.FC<{ apiKey: Key; onClose: () => void }> = ({ apiKey, onClose }) => {
+const NewKeyDialog: React.FC<{ apiKey: Key; onClose: () => void }> = ({ apiKey, onClose }) => {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -150,42 +424,53 @@ const NewKeyModal: React.FC<{ apiKey: Key; onClose: () => void }> = ({ apiKey, o
   };
 
   return (
-    <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
-      <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-        <h2 className="mb-2 text-2xl font-bold">API Key Created</h2>
-        <p className="mb-4 text-sm text-yellow-600 dark:text-yellow-400">
-          Please copy this key and store it securely. You will not be able to see it again.
-        </p>
-        <div className="relative rounded bg-gray-100 p-3 font-mono text-sm break-all dark:bg-gray-900">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("keys.keyCreatedTitle")}</DialogTitle>
+        </DialogHeader>
+        <div className="bg-muted relative rounded-md p-3 pr-10 font-mono text-sm break-all">
           {apiKey.key}
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={handleCopy}
-            className="absolute top-2 right-2 rounded p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700"
-            aria-label="Copy API Key"
+            className="absolute top-2 right-2"
+            aria-label={t("keys.copyApiKey")}
           >
-            <ClipboardCopyIcon className="h-5 w-5" />
-          </button>
+            <ClipboardCopy className="h-4 w-4" />
+          </Button>
         </div>
-        {copied && <p className="mt-2 text-xs text-green-500">Copied to clipboard!</p>}
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={onClose}
-            className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-          >
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
+        {copied && <p className="text-xs text-green-600 dark:text-green-400">{t("keys.copied")}</p>}
+        <DialogFooter>
+          <Button onClick={onClose}>{t("common.done")}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 
 export const KeyManagement: React.FC<KeyManagementProps> = ({ service }) => {
+  const { t } = useTranslation();
   const [keys, setKeys] = useState<Key[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Key | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Key | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+  const [copiedUid, setCopiedUid] = useState<string | null>(null);
+
+  const handleCopyKey = async (uid: string) => {
+    try {
+      await navigator.clipboard.writeText(uid);
+      setCopiedUid(uid);
+      setTimeout(() => setCopiedUid(null), 2000);
+    } catch (e) {
+      console.error("Failed to copy key uid", e);
+    }
+  };
 
   const fetchKeys = useCallback(async () => {
     setLoading(true);
@@ -194,7 +479,7 @@ export const KeyManagement: React.FC<KeyManagementProps> = ({ service }) => {
       const res = await service.getKeys();
       setKeys(res.results);
     } catch (e: any) {
-      setError(e.message || "Failed to fetch API keys.");
+      setError(e.message || t("keys.fetchFailed"));
     } finally {
       setLoading(false);
     }
@@ -204,130 +489,222 @@ export const KeyManagement: React.FC<KeyManagementProps> = ({ service }) => {
     fetchKeys();
   }, [fetchKeys]);
 
-  const handleCreateKey = async (keyData: Omit<Key, "uid" | "key" | "createdAt" | "updatedAt">) => {
+  const handleCreateKey = async (keyData: any) => {
     const newKey = await service.createKey(keyData);
     setNewlyCreatedKey(newKey);
-    setShowCreateModal(false);
+    setCreateOpen(false);
   };
 
-  const handleDeleteKey = async (uid: string) => {
-    if (
-      window.confirm("Are you sure you want to delete this API key? This action is irreversible.")
-    ) {
-      try {
-        await service.deleteKey(uid);
-        fetchKeys();
-      } catch (e: any) {
-        alert(`Failed to delete key: ${e.message}`);
-      }
+  const handleUpdateKey = async (keyData: { name?: string; description?: string }) => {
+    if (!editTarget) return;
+    await service.updateKey(editTarget.uid, keyData);
+    setEditTarget(null);
+    fetchKeys();
+  };
+
+  const handleDeleteKey = async () => {
+    if (!deleteTarget) return;
+    setDeleteError("");
+    try {
+      await service.deleteKey(deleteTarget.uid);
+      setDeleteTarget(null);
+      fetchKeys();
+    } catch (e: any) {
+      setDeleteError(e.message || t("keys.deleteFailed"));
     }
   };
 
-  const closeNewKeyModal = () => {
+  const closeNewKeyDialog = () => {
     setNewlyCreatedKey(null);
     fetchKeys();
   };
 
-  if (loading) return <div>Loading API keys...</div>;
-  if (error) return <div className="text-red-500">{error}</div>;
+  if (loading)
+    return (
+      <div>
+        <div className="mb-6 flex items-center justify-between">
+          <Skeleton className="h-9 w-48" />
+          <Skeleton className="h-9 w-36" />
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  if (error) return <div className="text-destructive">{error}</div>;
 
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold">API Keys</h1>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-        >
-          <PlusIcon className="mr-2 h-5 w-5" />
-          Create API Key
-        </button>
+        <h1 className="text-3xl font-bold">{t("keys.title")}</h1>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus />
+          {t("keys.createKey")}
+        </Button>
       </div>
 
-      <div className="overflow-x-auto rounded-lg bg-white shadow-md dark:bg-gray-800">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-700">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                Description
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                Key (prefix)
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                Actions
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                Indexes
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                Expires At
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+      <div className="bg-card overflow-x-auto rounded-lg border shadow-sm">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("keys.name")}</TableHead>
+              <TableHead>{t("keys.description")}</TableHead>
+              <TableHead>{t("keys.keyPrefix")}</TableHead>
+              <TableHead>{t("common.actions")}</TableHead>
+              <TableHead>{t("keys.indexes")}</TableHead>
+              <TableHead>{t("keys.expires")}</TableHead>
+              <TableHead>{t("keys.created")}</TableHead>
+              <TableHead className="text-right">{t("common.actions")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {keys.map((key) => (
-              <tr key={key.uid}>
-                <td className="max-w-sm px-6 py-4 break-words">{key.description || "-"}</td>
-                <td className="px-6 py-4 font-mono text-sm whitespace-nowrap">
-                  {key.uid.slice(0, 8)}...
-                </td>
-                <td className="px-6 py-4">
+              <TableRow key={key.uid}>
+                <TableCell className="max-w-[160px] truncate font-medium" title={key.name || "-"}>
+                  {key.name || "-"}
+                </TableCell>
+                <TableCell>
+                  <div className="max-w-[280px] truncate" title={key.description || "-"}>
+                    {key.description || "-"}
+                  </div>
+                </TableCell>
+                <TableCell className="font-mono text-sm whitespace-nowrap">
+                  <div className="flex items-center gap-1">
+                    <span>{key.uid.slice(0, 8)}...</span>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => handleCopyKey(key.uid)}
+                      aria-label={t("keys.copyUid", { uid: key.uid })}
+                    >
+                      {copiedUid === key.uid ? (
+                        <Check className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                </TableCell>
+                <TableCell>
                   <div className="flex max-w-xs flex-wrap gap-1">
                     {key.actions.map((action) => (
-                      <span
-                        key={action}
-                        className="rounded bg-gray-200 px-2 py-1 font-mono text-xs break-all dark:bg-gray-600"
-                      >
+                      <Badge key={action} variant="secondary" className="font-mono">
                         {action}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
-                </td>
-                <td className="px-6 py-4">
+                </TableCell>
+                <TableCell>
                   <div className="flex max-w-xs flex-wrap gap-1">
                     {key.indexes.map((index) => (
-                      <span
-                        key={index}
-                        className="rounded bg-blue-100 px-2 py-1 font-mono text-xs break-all text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                      >
+                      <Badge key={index} variant="outline" className="font-mono">
                         {index}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                  {key.expiresAt ? new Date(key.expiresAt).toLocaleString() : "Never"}
-                </td>
-                <td className="px-6 py-4 text-right text-sm font-medium whitespace-nowrap">
-                  <button
-                    onClick={() => handleDeleteKey(key.uid)}
-                    className="p-2 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-200"
-                    aria-label={`Delete key ${key.description}`}
+                </TableCell>
+                <TableCell className="text-sm whitespace-nowrap">
+                  {key.expiresAt ? (
+                    <span
+                      className={
+                        new Date(key.expiresAt).getTime() < Date.now()
+                          ? "text-destructive font-medium"
+                          : "text-muted-foreground"
+                      }
+                      title={`${t("keys.expires")} ${new Date(key.expiresAt).toLocaleString()}`}
+                    >
+                      {timeUntil(key.expiresAt, t)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">{t("common.never")}</span>
+                  )}
+                </TableCell>
+                <TableCell
+                  className="text-muted-foreground text-sm whitespace-nowrap"
+                  title={new Date(key.createdAt).toLocaleString()}
+                >
+                  {timeAgo(key.createdAt, t)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setEditTarget(key)}
+                    aria-label={t("keys.editKey", { name: key.name || key.description })}
                   >
-                    <TrashIcon className="h-5 w-5" />
-                  </button>
-                </td>
-              </tr>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setDeleteTarget(key)}
+                    aria-label={t("keys.deleteKey", { name: key.name || key.description })}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
             ))}
             {keys.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-10 text-center text-gray-500 dark:text-gray-400">
-                  No API keys found. Default keys may be hidden by Meilisearch.
-                </td>
-              </tr>
+              <TableRow>
+                <TableCell colSpan={8} className="text-muted-foreground h-24 text-center">
+                  {t("keys.empty")}
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
-      {showCreateModal && (
-        <KeyCreateModal onSave={handleCreateKey} onCancel={() => setShowCreateModal(false)} />
-      )}
-      {newlyCreatedKey && <NewKeyModal apiKey={newlyCreatedKey} onClose={closeNewKeyModal} />}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("keys.createKeyTitle")}</DialogTitle>
+            <DialogDescription>{t("keys.createKeyDesc")}</DialogDescription>
+          </DialogHeader>
+          <KeyCreateForm
+            service={service}
+            onSave={handleCreateKey}
+            onCancel={() => setCreateOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("keys.editKeyTitle")}</DialogTitle>
+            <DialogDescription>{t("keys.editKeyDesc")}</DialogDescription>
+          </DialogHeader>
+          {editTarget && (
+            <KeyCreateForm
+              key={editTarget.uid}
+              service={service}
+              initialData={editTarget}
+              onSave={handleUpdateKey}
+              onCancel={() => setEditTarget(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {newlyCreatedKey && <NewKeyDialog apiKey={newlyCreatedKey} onClose={closeNewKeyDialog} />}
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("keys.deleteKeyTitle")}</DialogTitle>
+            <DialogDescription>{t("keys.deleteKeyBody")}</DialogDescription>
+          </DialogHeader>
+          {deleteError && <p className="text-destructive text-sm">{deleteError}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteKey}>
+              {t("common.delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

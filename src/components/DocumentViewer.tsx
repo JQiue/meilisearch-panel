@@ -1,87 +1,140 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { ChevronDown, ChevronUp, Plus, Search, Trash2 } from "lucide-react";
+import { Meilisearch } from "meilisearch";
+import React, { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { MeilisearchService } from "../services/meilisearch";
-
-import { SearchIcon, TrashIcon, PlusIcon } from "./icons";
-
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 interface DocumentViewerProps {
   indexUid: string;
-  service: MeilisearchService;
+  service: Meilisearch;
 }
 
 export const DocumentViewer: React.FC<DocumentViewerProps> = ({ indexUid, service }) => {
+  const { t } = useTranslation();
   const [docs, setDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
   const [total, setTotal] = useState(0);
-  const [limit] = useState(20);
+  const [processingTimeMs, setProcessingTimeMs] = useState<number | null>(null);
+  const [limit, setLimit] = useState(20);
   const [offset, setOffset] = useState(0);
-  const [showAddModal, setShowAddModal] = useState(false);
+
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("");
+  const [sort, setSort] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "raw">("list");
+  const [rawResponse, setRawResponse] = useState<any>(null);
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [newDocsJson, setNewDocsJson] = useState(
     '[\n  {\n    "id": 1,\n    "title": "My first document"\n  }\n]',
   );
+  const [deleteDocId, setDeleteDocId] = useState<string | number | null>(null);
+  const [actionError, setActionError] = useState("");
+
+  const isSearching = query.trim() !== "";
 
   const fetchDocuments = useCallback(
     async (currentOffset: number) => {
       setLoading(true);
       setError(null);
       try {
-        if (searchQuery) {
-          const res = await service.search(indexUid, searchQuery, { limit, offset: currentOffset });
+        if (query.trim()) {
+          const options: any = { limit, offset: currentOffset };
+          if (filter.trim()) options.filter = filter.trim();
+          if (sort.trim())
+            options.sort = sort
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+          const res = await service.index(indexUid).search(query, options);
           setDocs(res.hits);
-          setTotal(res.estimatedTotalHits);
+          setTotal(res.estimatedTotalHits ?? 0);
+          setProcessingTimeMs(res.processingTimeMs);
+          setRawResponse(res);
         } else {
-          const res = await service.getDocuments(indexUid, { limit, offset: currentOffset });
+          const res = await service.index(indexUid).getDocuments({ limit, offset: currentOffset });
           setDocs(res.results);
           setTotal(res.total);
+          setProcessingTimeMs(null);
+          setRawResponse(res);
         }
       } catch (e: any) {
-        setError(e.message || "Failed to fetch documents.");
+        setError(e.message || t("documents.fetchFailed"));
       } finally {
         setLoading(false);
       }
     },
-    [indexUid, service, searchQuery, limit],
+    [indexUid, service, query, filter, sort, limit, t],
   );
 
   useEffect(() => {
-    setOffset(0);
     fetchDocuments(0);
-  }, [searchQuery, fetchDocuments]);
+    setOffset(0);
+  }, [query, filter, sort, limit]);
 
   useEffect(() => {
     fetchDocuments(offset);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offset]);
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
+  const handleDeleteDoc = async () => {
+    if (deleteDocId === null) return;
+    setActionError("");
+    try {
+      await service.index(indexUid).deleteDocument(deleteDocId);
+      setDeleteDocId(null);
+      setTimeout(() => fetchDocuments(offset), 500);
+    } catch (e: any) {
+      setActionError(t("documents.deleteFailed") + ": " + e.message);
+    }
   };
 
-  const handleDeleteDoc = async (docId: string | number) => {
-    if (window.confirm(`Are you sure you want to delete document ${docId}?`)) {
-      try {
-        await service.deleteDocument(indexUid, docId);
-        setTimeout(() => fetchDocuments(offset), 500);
-      } catch (e: any) {
-        alert(`Error deleting document: ${e.message}`);
-      }
+  const handleDeleteAll = async () => {
+    setActionError("");
+    try {
+      await service.index(indexUid).deleteAllDocuments();
+      setDeleteAllOpen(false);
+      setTimeout(() => fetchDocuments(0), 500);
+      setOffset(0);
+    } catch (e: any) {
+      setActionError(`Error clearing documents: ${e.message}`);
     }
   };
 
   const handleAddDocuments = async () => {
+    setActionError("");
     try {
       const documents = JSON.parse(newDocsJson);
       if (!Array.isArray(documents)) {
         throw new Error("Input must be a JSON array of documents.");
       }
-      await service.addDocuments(indexUid, documents);
-      setShowAddModal(false);
+      await service.index(indexUid).addDocuments(documents);
+      setAddOpen(false);
       setNewDocsJson('[\n  {\n    "id": 1,\n    "title": "My first document"\n  }\n]');
       setTimeout(() => fetchDocuments(offset), 500);
     } catch (e: any) {
-      alert(`Error adding documents: ${e.message}`);
+      setActionError(`Error adding documents: ${e.message}`);
     }
   };
 
@@ -91,117 +144,251 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ indexUid, servic
       : "id";
 
   return (
-    <div className="mt-6">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="relative w-full max-w-sm">
-          <input
-            type="text"
-            placeholder="Search documents..."
-            value={searchQuery}
-            onChange={handleSearchChange}
-            className="w-full rounded-lg border py-2 pr-4 pl-10 focus:ring-2 focus:ring-red-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700"
-          />
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-            <SearchIcon className="h-5 w-5 text-gray-400" />
+    <div>
+      <div className="mb-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="relative w-full max-w-sm">
+            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            <Input
+              type="text"
+              placeholder={t("documents.searchPlaceholder")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              aria-expanded={showAdvanced}
+            >
+              {t("documents.advanced")}
+              {showAdvanced ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteAllOpen(true)}
+              className="text-destructive hover:text-destructive"
+            >
+              <Trash2 />
+              {t("documents.clearAll")}
+            </Button>
+            <Button onClick={() => setAddOpen(true)}>
+              <Plus />
+              {t("documents.addDocuments")}
+            </Button>
           </div>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-        >
-          <PlusIcon className="mr-2 h-5 w-5" />
-          Add Documents
-        </button>
-      </div>
 
-      {loading && <p>Loading documents...</p>}
-      {error && <p className="text-red-500">{error}</p>}
-
-      <div className="overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-700">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                  Document
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {docs.map((doc, index) => (
-                <tr key={doc[primaryKey] || index}>
-                  <td className="px-6 py-4">
-                    <pre className="max-h-60 overflow-auto rounded bg-gray-100 p-2 text-xs dark:bg-gray-900">
-                      {JSON.stringify(doc, null, 2)}
-                    </pre>
-                  </td>
-                  <td className="px-6 py-4 text-right whitespace-nowrap">
-                    <button
-                      onClick={() => handleDeleteDoc(doc[primaryKey])}
-                      className="p-2 text-red-600 hover:text-red-800"
-                    >
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-gray-500">
-          Showing {offset + 1} to {Math.min(offset + limit, total)} of {total} results
-        </p>
-        <div className="space-x-2">
-          <button
-            onClick={() => setOffset(Math.max(0, offset - limit))}
-            disabled={offset === 0}
-            className="rounded-md border px-4 py-2 disabled:opacity-50 dark:border-gray-600"
-          >
-            Previous
-          </button>
-          <button
-            onClick={() => setOffset(offset + limit)}
-            disabled={offset + limit >= total}
-            className="rounded-md border px-4 py-2 disabled:opacity-50 dark:border-gray-600"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-      {showAddModal && (
-        <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
-          <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-            <h2 className="mb-4 text-2xl font-bold">Add/Update Documents</h2>
-            <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
-              Enter a JSON array of documents to add or update.
-            </p>
-            <textarea
-              value={newDocsJson}
-              onChange={(e) => setNewDocsJson(e.target.value)}
-              className="h-80 w-full rounded border p-2 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"
-            />
-            <div className="mt-6 flex justify-end space-x-3">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="rounded-md bg-gray-200 px-4 py-2 text-gray-800 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddDocuments}
-                className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-              >
-                Add Documents
-              </button>
+        {showAdvanced && (
+          <div className="bg-muted/30 grid grid-cols-1 gap-4 rounded-md border p-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="doc-filter">{t("documents.filter")}</Label>
+              <Input
+                id="doc-filter"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder={t("documents.filterPlaceholder")}
+                className="font-mono"
+              />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="doc-sort">{t("documents.sort")}</Label>
+              <Input
+                id="doc-sort"
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+                placeholder={t("documents.sortPlaceholder")}
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="doc-limit">{t("documents.limit")}</Label>
+              <Input
+                id="doc-limit"
+                type="number"
+                min={1}
+                value={limit}
+                onChange={(e) => setLimit(Math.max(1, parseInt(e.target.value, 10) || 20))}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 状态行：计数 + Raw 切换 */}
+      <div className="text-muted-foreground mb-2 flex items-center justify-between text-sm">
+        <p>
+          {isSearching
+            ? t("documents.foundResults", { count: total.toLocaleString() })
+            : t("documents.showingRange", {
+                from: docs.length > 0 ? offset + 1 : 0,
+                to: Math.min(offset + limit, total),
+                total: total.toLocaleString(),
+              })}
+          {processingTimeMs != null && <> · {processingTimeMs}ms</>}
+        </p>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setViewMode(viewMode === "list" ? "raw" : "list")}
+        >
+          {viewMode === "list" ? t("documents.rawJson") : t("documents.listView")}
+        </Button>
+      </div>
+
+      {loading && <p className="text-muted-foreground">{t("common.loading")}</p>}
+      {error && <p className="text-destructive">{error}</p>}
+
+      {/* 列表视图 */}
+      {viewMode === "list" && (
+        <div className="bg-card overflow-hidden rounded-lg border shadow-sm">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("documents.document")}</TableHead>
+                  <TableHead className="text-right">{t("common.actions")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {docs.map((doc, index) => (
+                  <TableRow key={doc[primaryKey] ?? index}>
+                    <TableCell>
+                      <pre className="bg-muted max-h-40 overflow-auto rounded-md p-2 font-mono text-xs">
+                        {JSON.stringify(doc, null, 2)}
+                      </pre>
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setDeleteDocId(doc[primaryKey])}
+                        aria-label={t("documents.deleteDocument")}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {docs.length === 0 && !loading && (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-muted-foreground h-24 text-center">
+                      {isSearching ? t("documents.noMatch") : t("documents.noDocuments")}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}
+
+      {/* Raw 视图 */}
+      {viewMode === "raw" && (
+        <pre className="bg-muted max-h-[50vh] overflow-auto rounded-md p-4 font-mono text-xs">
+          {rawResponse ? JSON.stringify(rawResponse, null, 2) : t("documents.runSearchFirst")}
+        </pre>
+      )}
+
+      {/* 分页 */}
+      {viewMode === "list" && docs.length > 0 && (
+        <div className="mt-4 flex items-center justify-between">
+          <p className="text-muted-foreground text-sm">
+            {t("documents.page", { page: Math.floor(offset / limit) + 1 })}
+          </p>
+          <div className="space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOffset(Math.max(0, offset - limit))}
+              disabled={offset === 0}
+            >
+              {t("documents.previous")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOffset(offset + limit)}
+              disabled={offset + limit >= total}
+            >
+              {t("documents.next")}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* 添加文档 */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{t("documents.addTitle")}</DialogTitle>
+            <DialogDescription>{t("documents.addDesc")}</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={newDocsJson}
+            onChange={(e) => setNewDocsJson(e.target.value)}
+            className="h-80 font-mono"
+          />
+          {actionError && <p className="text-destructive text-sm">{actionError}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={handleAddDocuments}>{t("documents.addDocuments")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除确认 */}
+      <Dialog open={deleteDocId !== null} onOpenChange={(open) => !open && setDeleteDocId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("documents.deleteConfirmTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("documents.deleteConfirmBodyDoc", { id: String(deleteDocId) })}
+            </DialogDescription>
+          </DialogHeader>
+          {actionError && <p className="text-destructive text-sm">{actionError}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDocId(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteDoc}>
+              {t("common.delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 清空所有文档确认 */}
+      <Dialog open={deleteAllOpen} onOpenChange={setDeleteAllOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Clear all documents?</DialogTitle>
+            <DialogDescription>
+              This will delete every document in this index ({total.toLocaleString()} documents).
+              The index itself will be kept. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {actionError && <p className="text-destructive text-sm">{actionError}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteAllOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteAll}>
+              Clear All
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
