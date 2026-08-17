@@ -1,5 +1,7 @@
 # MeiliSearch Panel
 
+[English](./README.md) | 简体中文
+
 MeiliSearch Panel 是一个基于 Web 的 MeiliSearch 实例管理面板。提供直观的界面用于监控索引、管理文档与 API 密钥、查看任务、调优索引设置以及执行搜索。
 
 ## 功能特性

@@ -1,5 +1,7 @@
 # MeiliSearch Panel
 
+English | [简体中文](./README.zh-CN.md)
+
 MeiliSearch Panel is a web-based administration panel for MeiliSearch instances. It provides an intuitive interface for monitoring indexes, managing documents and API keys, viewing tasks, tuning index settings, and performing search operations.
 
 ## Features
