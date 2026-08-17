@@ -11,9 +11,9 @@ import {
   BarChart3,
   ChevronsUpDown,
   Code2,
-  Cog,
   Database,
   Key,
+  ListChecks,
   LogOut,
   Server,
 } from "lucide-react";
@@ -117,7 +117,8 @@ function ConnectionLayout() {
     try {
       const [indexesRes, tasksRes, statsRes] = await Promise.all([
         service.getRawIndexes(),
-        service.tasks.getTasks(),
+        // 默认按 UID 降序（最新在前），与任务页分页一致；limit 100 覆盖侧边栏徽章与索引筛选选项
+        service.tasks.getTasks({ limit: 100 }),
         service.getStats(),
       ]);
       setIndexes(indexesRes.results);
@@ -199,23 +200,32 @@ function ConnectionLayout() {
     <SidebarProvider>
       <Sidebar collapsible="icon">
         <SidebarHeader>
-          <div className="px-2 pt-2">
-            <div className="text-2xl font-bold text-red-600">MeiliSearch Panel</div>
+          <div className="px-2 pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+            <div className="flex items-center gap-2 whitespace-nowrap">
+              <img src="/meilisearch.ico" alt="MeiliSearch" className="h-6 w-6 shrink-0" />
+              <span className="text-xl font-bold text-red-600 group-data-[collapsible=icon]:hidden">
+                MeiliSearch Panel
+              </span>
+            </div>
           </div>
-          <div ref={switcherRef} className="relative px-1">
+          <div ref={switcherRef} className="relative flex justify-center p-2">
             <SidebarMenuButton
               size="lg"
               onClick={() => setShowSwitcher(!showSwitcher)}
               aria-expanded={showSwitcher}
+              tooltip={connection.name}
             >
               <Server />
-              <span className="truncate font-semibold" title={connection.name}>
+              <span
+                className="truncate font-semibold group-data-[collapsible=icon]:hidden"
+                title={connection.name}
+              >
                 {connection.name}
               </span>
-              <ChevronsUpDown className="ml-auto h-4 w-4 opacity-50" />
+              <ChevronsUpDown className="ml-auto h-4 w-4 opacity-50 group-data-[collapsible=icon]:hidden" />
             </SidebarMenuButton>
             {showSwitcher && (
-              <div className="bg-popover absolute top-full z-10 mt-1 w-full rounded-md border shadow-lg">
+              <div className="bg-popover absolute top-full z-10 mt-1 w-full min-w-56 rounded-md border shadow-lg">
                 <ScrollArea className="max-h-48">
                   {connections
                     .filter((c) => c.id !== connection.id)
@@ -270,7 +280,8 @@ function ConnectionLayout() {
                     isActive={isActive("/tasks")}
                     tooltip={t("nav.tasks")}
                   >
-                    <Cog />
+                    <ListChecks />
+                    {/* <Cog /> */}
                     <span>{t("nav.tasks")}</span>
                     {activeTasks > 0 && (
                       <SidebarMenuBadge className="bg-destructive/10 text-destructive">
@@ -305,11 +316,12 @@ function ConnectionLayout() {
         </SidebarContent>
         <SidebarFooter>
           <SidebarSeparator />
-          <div className="flex items-center justify-between px-1">
+          <div className="flex items-center justify-between px-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-1">
             {/* 健康状态圆点 */}
             <Button
               variant="ghost"
               size="icon"
+              className="group-data-[collapsible=icon]:order-last"
               title={
                 healthy === null
                   ? t("nav.checkingHealth")
@@ -335,7 +347,7 @@ function ConnectionLayout() {
                 }`}
               />
             </Button>
-            <div className="flex items-center group-data-[collapsible=icon]:hidden">
+            <div className="flex items-center group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
               <LanguageToggle />
               <ThemeToggle />
               <Button

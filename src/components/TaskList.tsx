@@ -1,4 +1,4 @@
-import { AlertCircle, Ban, Loader2 } from "lucide-react";
+import { Ban, Eye, Loader2 } from "lucide-react";
 import { Meilisearch } from "meilisearch";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,12 +14,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import {
   Pagination,
   PaginationContent,
   PaginationItem,
-  PaginationLink,
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
@@ -59,7 +57,7 @@ const statusVariantMap: Record<
 };
 
 const STATUS_FILTERS = [
-  { value: "", labelKey: "tasks.filterStatus", helperKey: "tasks.showEverything" },
+  { value: "all", labelKey: "tasks.filterStatus", helperKey: "tasks.showEverything" },
   { value: "enqueued", labelKey: "tasks.statusEnqueued", helperKey: "tasks.enqueued" },
   { value: "processing", labelKey: "tasks.statusProcessing", helperKey: "tasks.processing" },
   { value: "succeeded", labelKey: "tasks.statusSucceeded", helperKey: "tasks.succeeded" },
@@ -68,7 +66,7 @@ const STATUS_FILTERS = [
 ] as const;
 
 const TYPE_FILTERS = [
-  { value: "", labelKey: "tasks.filterType", helperKey: "tasks.showEverything" },
+  { value: "all", labelKey: "tasks.filterType", helperKey: "tasks.showEverything" },
   {
     value: "documentAdditionOrUpdate",
     labelKey: "tasks.typeDocAddLabel",
@@ -117,9 +115,9 @@ export const TaskList: React.FC<TaskListProps> = ({ service, initialTasks }) => 
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
-  const [indexFilter, setIndexFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>("all");
+  const [typeFilter, setTypeFilter] = useState<string | null>("all");
+  const [indexFilter, setIndexFilter] = useState<string | null>("all");
   const [detailTask, setDetailTask] = useState<Task | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Task | null>(null);
   const [cancelError, setCancelError] = useState("");
@@ -141,11 +139,12 @@ export const TaskList: React.FC<TaskListProps> = ({ service, initialTasks }) => 
       setLoading(true);
       setError(null);
       try {
-        const params: any = { limit: PAGE_SIZE, reverse: true };
+        // 默认按 UID 降序（最新在前）；from 游标翻页
+        const params: any = { limit: PAGE_SIZE };
         if (from !== null) params.from = from;
-        if (statusFilter) params.statuses = [statusFilter];
-        if (typeFilter) params.types = [typeFilter];
-        if (indexFilter) params.indexUids = [indexFilter];
+        if (statusFilter && statusFilter !== "all") params.statuses = [statusFilter];
+        if (typeFilter && typeFilter !== "all") params.types = [typeFilter];
+        if (indexFilter && indexFilter !== "all") params.indexUids = [indexFilter];
         const res = await service.tasks.getTasks(params);
         setTasks(res.results);
         setTotalTasks(res.total);
@@ -209,10 +208,13 @@ export const TaskList: React.FC<TaskListProps> = ({ service, initialTasks }) => 
       {/* 筛选工具栏 */}
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="space-y-1">
-          <Label className="text-muted-foreground text-xs">{t("common.status")}</Label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select
+            value={statusFilter}
+            onValueChange={setStatusFilter}
+            items={STATUS_FILTERS.map((s) => ({ value: s.value, label: t(s.labelKey) }))}
+          >
             <SelectTrigger className="w-40">
-              <SelectValue placeholder={t("tasks.filterStatus")} />
+              <SelectValue />
             </SelectTrigger>
             <SelectContent className="min-w-64!">
               {STATUS_FILTERS.map((s) => (
@@ -224,10 +226,13 @@ export const TaskList: React.FC<TaskListProps> = ({ service, initialTasks }) => 
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-muted-foreground text-xs">{t("common.type")}</Label>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <Select
+            value={typeFilter}
+            onValueChange={setTypeFilter}
+            items={TYPE_FILTERS.map((f) => ({ value: f.value, label: t(f.labelKey) }))}
+          >
             <SelectTrigger className="w-48">
-              <SelectValue placeholder={t("tasks.filterType")} />
+              <SelectValue />
             </SelectTrigger>
             <SelectContent className="min-w-72!">
               {TYPE_FILTERS.map((flt) => (
@@ -240,13 +245,19 @@ export const TaskList: React.FC<TaskListProps> = ({ service, initialTasks }) => 
         </div>
         {indexOptions.length > 1 && (
           <div className="space-y-1">
-            <Label className="text-muted-foreground text-xs">{t("common.index")}</Label>
-            <Select value={indexFilter} onValueChange={setIndexFilter}>
+            <Select
+              value={indexFilter}
+              onValueChange={setIndexFilter}
+              items={[
+                { value: "all", label: t("tasks.filterIndex") },
+                ...indexOptions.map((uid) => ({ value: uid, label: uid })),
+              ]}
+            >
               <SelectTrigger className="w-40">
-                <SelectValue placeholder={t("tasks.filterIndex")} />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">{t("tasks.filterIndex")}</SelectItem>
+                <SelectItem value="all">{t("tasks.filterIndex")}</SelectItem>
                 {indexOptions.map((uid) => (
                   <SelectItem key={uid} value={uid}>
                     {uid}
@@ -282,8 +293,8 @@ export const TaskList: React.FC<TaskListProps> = ({ service, initialTasks }) => 
             {tasks.map((task) => (
               <TableRow
                 key={task.uid}
-                className={task.status === "failed" ? "cursor-pointer" : undefined}
-                onClick={() => task.status === "failed" && setDetailTask(task)}
+                className="cursor-pointer"
+                onClick={() => setDetailTask(task)}
               >
                 <TableCell className="whitespace-nowrap">{task.uid}</TableCell>
                 <TableCell className="whitespace-nowrap">
@@ -298,19 +309,17 @@ export const TaskList: React.FC<TaskListProps> = ({ service, initialTasks }) => 
                   {new Date(task.enqueuedAt).toLocaleString()}
                 </TableCell>
                 <TableCell className="text-right">
-                  {task.status === "failed" && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDetailTask(task);
-                      }}
-                      aria-label={t("tasks.viewError", { uid: task.uid })}
-                    >
-                      <AlertCircle className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDetailTask(task);
+                    }}
+                    aria-label={t("tasks.viewTask", { uid: task.uid })}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
                   {isCancelable(task) && (
                     <Button
                       variant="ghost"
@@ -344,7 +353,8 @@ export const TaskList: React.FC<TaskListProps> = ({ service, initialTasks }) => 
           <PaginationContent>
             <PaginationItem>
               <PaginationPrevious
-                text={t("common.previous")}
+                text=""
+                aria-label={t("common.previous")}
                 onClick={(e) => {
                   e.preventDefault();
                   if (hasPrev) goPrev();
@@ -353,13 +363,14 @@ export const TaskList: React.FC<TaskListProps> = ({ service, initialTasks }) => 
               />
             </PaginationItem>
             <PaginationItem>
-              <PaginationLink isActive className="pointer-events-none">
+              <span className="text-muted-foreground px-3 text-sm whitespace-nowrap">
                 {t("common.pageOf", { page: currentPage, total: totalPages })}
-              </PaginationLink>
+              </span>
             </PaginationItem>
             <PaginationItem>
               <PaginationNext
-                text={t("common.next")}
+                text=""
+                aria-label={t("common.next")}
                 onClick={(e) => {
                   e.preventDefault();
                   if (hasNext) goNext();
@@ -371,32 +382,69 @@ export const TaskList: React.FC<TaskListProps> = ({ service, initialTasks }) => 
         </Pagination>
       )}
 
-      {/* 失败任务详情 */}
+      {/* 任务详情 */}
       <Dialog open={!!detailTask} onOpenChange={(open) => !open && setDetailTask(null)}>
-        <DialogContent className="overflow-hidden">
+        <DialogContent className="max-w-lg overflow-hidden">
           <DialogHeader>
-            <DialogTitle>{t("tasks.failedTitle", { uid: detailTask?.uid })}</DialogTitle>
+            <DialogTitle>{t("tasks.detailTitle", { uid: detailTask?.uid })}</DialogTitle>
             <DialogDescription className="font-mono text-xs break-all">
               {detailTask?.type} · {detailTask?.indexUid || t("common.noIndex")}
             </DialogDescription>
           </DialogHeader>
-          {detailTask?.error && (
-            <div className="min-w-0 space-y-2">
-              <p className="text-destructive text-sm font-semibold break-words">
-                {detailTask.error.message}
-              </p>
-              <pre className="bg-muted max-h-60 w-full overflow-x-auto overflow-y-auto rounded-md p-3 font-mono text-xs">
-                {JSON.stringify(
-                  {
-                    code: detailTask.error.code,
-                    type: detailTask.error.type,
-                    link: detailTask.error.link,
-                    details: detailTask.details ?? null,
-                  },
-                  null,
-                  2,
+          {detailTask && (
+            <div className="min-w-0 space-y-4">
+              {/* 基本信息 */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <div className="text-muted-foreground">{t("common.status")}</div>
+                <div>
+                  <Badge variant={statusVariantMap[detailTask.status]}>{detailTask.status}</Badge>
+                </div>
+                <div className="text-muted-foreground">{t("common.type")}</div>
+                <div className="font-mono">{detailTask.type}</div>
+                <div className="text-muted-foreground">{t("common.index")}</div>
+                <div className="font-mono">{detailTask.indexUid || "-"}</div>
+                <div className="text-muted-foreground">{t("common.duration")}</div>
+                <div>{detailTask.duration || "-"}</div>
+                <div className="text-muted-foreground">{t("tasks.enqueuedAt")}</div>
+                <div>{new Date(detailTask.enqueuedAt).toLocaleString()}</div>
+                <div className="text-muted-foreground">{t("tasks.startedAt")}</div>
+                <div>
+                  {detailTask.startedAt ? new Date(detailTask.startedAt).toLocaleString() : "-"}
+                </div>
+                <div className="text-muted-foreground">{t("tasks.finishedAt")}</div>
+                <div>
+                  {detailTask.finishedAt ? new Date(detailTask.finishedAt).toLocaleString() : "-"}
+                </div>
+                <div className="text-muted-foreground">{t("tasks.canceledBy")}</div>
+                <div>{detailTask.canceledBy ?? "-"}</div>
+                {detailTask.batchUid !== undefined && (
+                  <>
+                    <div className="text-muted-foreground">{t("tasks.batchUid")}</div>
+                    <div>{detailTask.batchUid ?? "-"}</div>
+                  </>
                 )}
-              </pre>
+              </div>
+
+              {/* 错误信息（仅失败任务） */}
+              {detailTask.error && (
+                <div className="space-y-2">
+                  <p className="text-destructive text-sm font-semibold break-words">
+                    {detailTask.error.message}
+                  </p>
+                  <pre className="bg-muted max-h-60 w-full overflow-x-auto overflow-y-auto rounded-md p-3 font-mono text-xs">
+                    {JSON.stringify(
+                      {
+                        code: detailTask.error.code,
+                        type: detailTask.error.type,
+                        link: detailTask.error.link,
+                        details: detailTask.details ?? null,
+                      },
+                      null,
+                      2,
+                    )}
+                  </pre>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

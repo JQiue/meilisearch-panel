@@ -1,9 +1,0 @@
-<svg viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <title>Meilisearch Panel Icon</title>
-  <path
-    d="M112 192C155.137 192 192 155.137 192 112C192 68.8629 155.137 32 112 32C68.8629 32 32 68.8629 32 112C32 155.137 68.8629 192 112 192Z"
-    stroke="#DC2626" stroke-width="24" stroke-miterlimit="10" />
-  <path d="M168 168L224 224" stroke="#DC2626" stroke-width="24" stroke-linecap="round"
-    stroke-miterlimit="10" />
-  <path d="M80 144V80H96L112 104L128 80H144V144H128V96L112 120L96 96V144H80Z" fill="#DC2626" />
-</svg>

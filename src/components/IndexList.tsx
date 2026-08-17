@@ -116,7 +116,11 @@ export const IndexList: React.FC<IndexListProps> = ({
             {indexes.map((index) => {
               const stats = indexStats[index.uid];
               return (
-                <TableRow key={index.uid}>
+                <TableRow
+                  key={index.uid}
+                  className="cursor-pointer"
+                  onClick={() => setDetailTarget(index)}
+                >
                   <TableCell className="text-primary font-mono">{index.uid}</TableCell>
                   <TableCell className="font-mono">
                     {index.primaryKey || t("indexes.notSet")}
@@ -144,7 +148,10 @@ export const IndexList: React.FC<IndexListProps> = ({
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => setDetailTarget(index)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetailTarget(index);
+                      }}
                       aria-label={t("indexes.viewDetails", { uid: index.uid })}
                     >
                       <Eye className="h-4 w-4" />
@@ -152,7 +159,10 @@ export const IndexList: React.FC<IndexListProps> = ({
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => setDeleteTarget(index)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget(index);
+                      }}
                       aria-label={t("common.delete")}
                     >
                       <Trash2 className="h-4 w-4" />

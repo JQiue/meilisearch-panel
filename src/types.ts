@@ -17,9 +17,11 @@ export interface IndexStats {
 
 export interface Task {
   uid: number;
+  batchUid?: number | null;
   indexUid: string | null;
   status: "enqueued" | "processing" | "succeeded" | "failed" | "canceled";
   type: string;
+  canceledBy?: number | null;
   details?: any;
   error: any;
   duration: string | null;
