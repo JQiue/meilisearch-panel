@@ -183,7 +183,7 @@ export const en = {
     name: "Name",
     nameOptional: "Name (optional)",
     description: "Description",
-    keyPrefix: "Key (prefix)",
+    key: "Key",
     indexes: "Indexes",
     expires: "Expires",
     created: "Created",

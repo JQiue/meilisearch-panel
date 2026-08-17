@@ -547,7 +547,7 @@ export const KeyManagement: React.FC<KeyManagementProps> = ({ service }) => {
             <TableRow>
               <TableHead>{t("keys.name")}</TableHead>
               <TableHead>{t("keys.description")}</TableHead>
-              <TableHead>{t("keys.keyPrefix")}</TableHead>
+              <TableHead>{t("keys.key")}</TableHead>
               <TableHead>{t("common.actions")}</TableHead>
               <TableHead>{t("keys.indexes")}</TableHead>
               <TableHead>{t("keys.expires")}</TableHead>

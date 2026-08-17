@@ -183,7 +183,7 @@ export const zhCN: Translation = {
     name: "名称",
     nameOptional: "名称（可选）",
     description: "描述",
-    keyPrefix: "密钥（前缀）",
+    key: "密钥",
     indexes: "索引",
     expires: "过期时间",
     created: "创建时间",
